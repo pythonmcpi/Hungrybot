@@ -1,6 +1,7 @@
 import discord
 import re
 from discord.ext import commands
+import asyncio
 
 from default_players import default_players
 from hungergames import HungerGames
@@ -9,13 +10,21 @@ from bot import HungryBot
 from config import config
 
 prefix = '''h$'''
-bot = HungryBot(command_prefix=prefix, description="A Hunger Games simulator bot")
+bot = HungryBot(command_prefix=prefix, description="A Hunger Games simulator bot", intents=discord.Intents.all())
 hg = HungerGames()
 
 
 @bot.event
 async def on_ready():
     print('Logged in!')
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.errors.MissingPermissions):
+        await ctx.reply("You do not have permission to run this command!")
+    else:
+        raise error
 
 
 @bot.command()
@@ -26,6 +35,7 @@ async def ping(ctx):
 
 @bot.command(rest_is_raw=True)
 @commands.guild_only()
+@commands.has_permissions(manage_messages=True)
 async def new(ctx, *, title: str = None):
     """
     Start a new Hunger Games simulation in the current channel.
@@ -103,6 +113,7 @@ async def remove(ctx, *, name: str):
 
 @bot.command()
 @commands.guild_only()
+@commands.has_permissions(administrator=True)
 async def fill(ctx, group_name=None):
     """
     Pad out empty slots in a new game with default characters.
@@ -123,6 +134,30 @@ async def fill(ctx, group_name=None):
     if not await __check_errors(ctx, ret):
         return
     await ctx.send(ret)
+
+
+@bot.command()
+@commands.guild_only()
+@commands.has_permissions(administrator=True)
+async def max_players(ctx, amount="24"):
+    """
+    Set the maximum amount of players in a game. This is a global setting.
+    
+    amount (Optional) - The new maximum of players. Defaults to 24.
+    """
+    try:
+        amount = int(amount)
+    except ValueError:
+        await ctx.reply("Invalid amount given! Amount must be a number.")
+        return
+    if amount < 2:
+        await ctx.reply("You need at least two players!")
+        return
+    elif amount > 1000:
+        await ctx.reply("1000 players is the maximum supported right now. Sorry1")
+        return
+    hg.MAX_PLAYERS = amount
+    await ctx.reply("Maximum number of players set to {0}".format(amount))
 
 
 @bot.command()
@@ -167,18 +202,33 @@ async def end(ctx):
 
 @bot.command()
 @commands.guild_only()
-async def step(ctx):
+async def step(ctx, amount=None):
     """
-    Steps forward the current game in the channel by one round.
+    Steps forward the current game in the channel by <amount> rounds.
+    
+    amount (Optional) - The number of rounds to advance. Defaults to 1.
     """
-    ret = hg.step(ctx.channel.id, ctx.author.id)
-    if not await __check_errors(ctx, ret):
-        return
-    embed = discord.Embed(title=ret['title'], color=ret['color'], description=ret['description'])
-    if ret['footer'] is not None:
-        embed.set_footer(text=ret['footer'])
-    await ctx.send(embed=embed)
-
+    if amount is None:
+        amount = 1
+    else:
+        if amount == "max" or amount == "all":
+            amount = 999999999
+        else:
+            try:
+                amount = int(amount)
+            except ValueError:
+                amount = 1
+    for i in range(amount):
+        ret = hg.step(ctx.channel.id, ctx.author.id)
+        if i > 1 and type(ret) is ErrorCode and ret is ErrorCode.NO_GAME:
+            return # It means the game ended
+        if not await __check_errors(ctx, ret):
+            return
+        embed = discord.Embed(title=ret['title'], color=ret['color'], description=ret['description'])
+        if ret['footer'] is not None:
+            embed.set_footer(text=ret['footer'])
+        await ctx.send(embed=embed)
+        await asyncio.sleep(5)
 
 async def __check_errors(ctx, error_code):
     if type(error_code) is not ErrorCode:

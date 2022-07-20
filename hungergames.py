@@ -5,9 +5,9 @@ from game import Game
 from player import Player
 from enums import ErrorCode
 
-
 class HungerGames:
     active_games = {}
+    MAX_PLAYERS = 24
 
     def new_game(self, channel_id, owner_id, owner_name, title):
         if channel_id in self.active_games:
@@ -22,7 +22,7 @@ class HungerGames:
 
         if this_game.has_started:
             return ErrorCode.GAME_STARTED
-        if len(this_game.players) >= 24:
+        if len(this_game.players) >= self.MAX_PLAYERS:
             return ErrorCode.GAME_FULL
 
         if gender is not None:
@@ -74,12 +74,12 @@ class HungerGames:
 
         if this_game.has_started:
             return ErrorCode.GAME_STARTED
-        if len(this_game.players) >= 24:
+        if len(this_game.players) >= self.MAX_PLAYERS:
             return ErrorCode.GAME_FULL
         if group is None:
             return ErrorCode.INVALID_GROUP
 
-        new_players = random.sample(group, min(24 - len(this_game.players), len(group)))
+        new_players = random.sample(group, min(self.MAX_PLAYERS - len(this_game.players), len(group)))
         messages = []
         for p in new_players:
             if type(p) is tuple:
@@ -108,8 +108,8 @@ class HungerGames:
 
         summary = {
             'title': this_game.title,
-            'footer': "Players: {0}/24 | Host: {1}"
-                      .format(len(this_game.players), this_game.owner_name)
+            'footer': "Players: {0}/{1} | Host: {2}"
+                      .format(len(this_game.players), self.MAX_PLAYERS, this_game.owner_name)
         }
 
         if len(player_list) == 0:
